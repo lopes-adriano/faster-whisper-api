@@ -1,0 +1,17 @@
+services:
+  whisper:
+    build:
+      context: .
+    image: faster-whisper-api:small
+    container_name: whisper-api
+    ports:
+      - "8000:8000"
+    # 4 vCPU and 8 GB, e.g. a Fargate task with 4 vCPU / 8 GB.
+    cpus: "4.0"
+    mem_limit: 8g
+    environment:
+      ASR_ENGINE: whisper-small
+      ASR_ENGINES: whisper-small,whisper-turbo,whisper-base,whisper-tiny
+      # Matches cpus above; unset it to auto-detect the cgroup quota instead.
+      WHISPER_CPU_THREADS: "4"
+    restart: unless-stopped

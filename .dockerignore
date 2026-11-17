@@ -1,0 +1,12 @@
+.venv/
+.uploads/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.git/
+.gitignore
+.openchamber/
+docker-compose.yml
+Dockerfile
+.dockerignore
+.python-version

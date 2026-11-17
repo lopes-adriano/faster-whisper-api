@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Transcriber · local speech-to-text</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f46e5' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f8;
+    --panel: #ffffff;
+    --text: #18181b;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --danger: #dc2626;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1012;
+      --panel: #17181b;
+      --text: #f4f4f5;
+      --muted: #9ca3af;
+      --line: #2a2c31;
+      --accent: #818cf8;
+      --accent-soft: #1e1b4b;
+      --danger: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 800px; margin: 0 auto; padding: 48px 20px 72px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 10px;
+    display: grid; place-items: center;
+    background: var(--accent); color: #fff;
+  }
+  .logo svg { width: 19px; height: 19px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  .model-tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px; color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    padding: 2px 8px; border-radius: 999px;
+    max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sub { color: var(--muted); margin: 10px 0 26px; font-size: 14px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+
+  .drop {
+    display: block;
+    border: 1.5px dashed var(--line);
+    border-radius: 12px;
+    padding: 34px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+  .drop input { display: none; }
+  .drop-icon {
+    width: 40px; height: 40px; margin: 0 auto 10px;
+    border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .drop-icon svg { width: 20px; height: 20px; }
+  .drop-title { font-weight: 600; }
+  .drop-sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .picked {
+    margin: 14px auto 0; max-width: 100%;
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--text); border-radius: 10px; padding: 8px 12px;
+    font-size: 13px; max-width: 100%;
+  }
+  .picked .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
+  .picked .size { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .options { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin-top: 16px; }
+  .field { display: grid; gap: 5px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .01em; }
+  select {
+    font: inherit; font-size: 14px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 10px; min-width: 168px;
+  }
+  select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); padding-bottom: 8px; cursor: pointer; }
+  .check input { accent-color: var(--accent); width: 15px; height: 15px; }
+  .check:has(input:disabled), .field:has(select:disabled) { opacity: .45; cursor: not-allowed; }
+  select:disabled { cursor: not-allowed; }
+  button {
+    font: inherit; font-size: 14px; cursor: pointer;
+    border-radius: 9px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text);
+    padding: 8px 12px; transition: background .15s, border-color .15s, opacity .15s;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .primary {
+    margin-left: auto; align-self: end;
+    background: var(--accent); border-color: var(--accent); color: #fff;
+    font-weight: 600; padding: 9px 20px;
+  }
+  .primary:hover:not(:disabled) { filter: brightness(1.07); border-color: var(--accent); }
+
+  .status { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: var(--muted); font-size: 13px; }
+  .status.error { color: var(--danger); }
+  .spinner {
+    width: 15px; height: 15px; border-radius: 50%; flex: none;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  .result-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-size: 12px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .actions button { font-size: 12.5px; padding: 5px 10px; }
+  audio { width: 100%; height: 38px; margin-bottom: 6px; }
+
+  .segments { max-height: 52vh; overflow-y: auto; margin-top: 8px; padding-right: 4px; }
+  .segment {
+    display: grid; grid-template-columns: 62px 1fr; gap: 12px;
+    padding: 6px 8px; border-radius: 8px;
+    transition: background .12s;
+  }
+  .segment:hover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
+  .segment.active { background: var(--accent-soft); }
+  .segment .ts {
+    align-self: start; background: none; border: none; padding: 1px 0;
+    color: var(--accent); font-size: 12px; text-align: right;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .segment p { margin: 0; }
+  .speaker {
+    display: inline-block; margin-bottom: 2px;
+    font-size: 11px; font-weight: 600; letter-spacing: .01em;
+    color: hsl(var(--speaker-hue, 220) 65% 42%);
+    background: hsl(var(--speaker-hue, 220) 70% 50% / 0.14);
+    border-radius: 999px; padding: 1px 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    .speaker { color: hsl(var(--speaker-hue, 220) 80% 74%); background: hsl(var(--speaker-hue, 220) 70% 60% / 0.18); }
+  }
+  .empty { color: var(--muted); font-size: 14px; padding: 8px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 22px; }
+  footer code { font-size: 11.5px; }
+  @media (max-width: 560px) {
+    main { padding-top: 28px; }
+    .primary { margin-left: 0; width: 100%; }
+    .segment { grid-template-columns: 52px 1fr; gap: 8px; }
+    .picked .name { max-width: 200px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+          <circle cx="12" cy="12" r="3.2" />
+        </svg>
+      </span>
+      <h1>Transcriber</h1>
+      <span class="model-tag" id="model-tag">small</span>
+    </div>
+    <p class="sub">Local speech-to-text with faster-whisper. Audio is processed on this machine and deleted right after.</p>
+  </header>
+
+  <section class="card">
+    <label class="drop" id="drop" for="file-input">
+      <input id="file-input" type="file" accept="audio/*,video/*,.mp3,.wav,.m4a,.ogg,.oga,.flac,.mp4,.webm,.mkv,.aac,.opus,.wma" />
+      <div class="drop-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+        </svg>
+      </div>
+      <div class="drop-title">Drop an audio file here</div>
+      <div class="drop-sub">or click to browse · mp3, wav, m4a, ogg, flac, mp4, webm</div>
+      <div class="picked" id="picked" hidden>
+        <span class="name" id="picked-name"></span>
+        <span class="size" id="picked-size"></span>
+      </div>
+    </label>
+
+    <div class="options">
+      <label class="field" for="engine">Engine
+        <select id="engine"></select>
+      </label>
+      <label class="field" for="language">Language
+        <select id="language">
+          <option value="">Auto detect</option>
+          <option value="en">English</option>
+          <option value="pt">Portuguese</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="nl">Dutch</option>
+          <option value="pl">Polish</option>
+          <option value="ru">Russian</option>
+          <option value="uk">Ukrainian</option>
+          <option value="tr">Turkish</option>
+          <option value="ar">Arabic</option>
+          <option value="he">Hebrew</option>
+          <option value="hi">Hindi</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
+          <option value="zh">Chinese</option>
+          <option value="vi">Vietnamese</option>
+          <option value="id">Indonesian</option>
+          <option value="th">Thai</option>
+          <option value="sv">Swedish</option>
+          <option value="da">Danish</option>
+          <option value="no">Norwegian</option>
+          <option value="fi">Finnish</option>
+          <option value="cs">Czech</option>
+          <option value="el">Greek</option>
+          <option value="hu">Hungarian</option>
+          <option value="ro">Romanian</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="translate" aria-label="Translate to English" /> Translate to English</label>
+      <label class="check"><input type="checkbox" id="vad" aria-label="Skip silence" checked /> Skip silence</label>
+      <label class="check" id="diarize-label"><input type="checkbox" id="diarize" aria-label="Separate speakers" /> Separate speakers</label>
+      <button class="primary" id="run" disabled>Transcribe</button>
+    </div>
+
+    <div class="status" id="status" hidden aria-live="polite">
+      <span class="spinner" id="spinner"></span>
+      <span id="status-text">Working…</span>
+      <span class="mono" id="status-time"></span>
+    </div>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <div class="result-head">
+      <div class="chips" id="chips"></div>
+      <div class="actions">
+        <button id="copy">Copy text</button>
+        <button id="download-txt">.txt</button>
+        <button id="download-srt">.srt</button>
+      </div>
+    </div>
+    <audio id="player" controls preload="metadata"></audio>
+    <div class="segments" id="segments"></div>
+  </section>
+
+  <footer>POST <code>/transcribe</code> for scripts · interactive docs at <code>/docs</code></footer>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const fileInput = $("file-input");
+  const drop = $("drop");
+  const picked = $("picked");
+  const runBtn = $("run");
+  const statusEl = $("status");
+  const spinner = $("spinner");
+  const statusText = $("status-text");
+  const statusTime = $("status-time");
+  const resultEl = $("result");
+  const chips = $("chips");
+  const segmentsEl = $("segments");
+  const player = $("player");
+  const engineSelect = $("engine");
+  const languageSelect = $("language");
+  const diarizeBox = $("diarize");
+
+  const state = {
+    file: null,
+    data: null,
+    audioUrl: null,
+    pollId: null,
+    tickId: null,
+    startedAt: 0,
+    rows: [],
+    engines: {},
+    diarization: false,
+  };
+
+  const prettySize = (bytes) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+  const clock = (seconds) => {
+    const t = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    const mm = h ? String(m).padStart(2, "0") : String(m);
+    return (h ? h + ":" : "") + mm + ":" + String(s).padStart(2, "0");
+  };
+
+  function setFile(file) {
+    if (!file) return;
+    state.file = file;
+    $("picked-name").textContent = file.name;
+    $("picked-size").textContent = prettySize(file.size);
+    picked.hidden = false;
+    runBtn.disabled = false;
+    resultEl.hidden = true;
+    setStatus(null);
+    if (state.audioUrl) { URL.revokeObjectURL(state.audioUrl); state.audioUrl = null; }
+  }
+
+  // --- file input / drag & drop -------------------------------------------
+  fileInput.addEventListener("change", () => {
+    setFile(fileInput.files[0]);
+    fileInput.value = ""; // allow picking the same file again
+  });
+  ["dragenter", "dragover"].forEach((evt) =>
+    drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.add("drag"); })
+  );
+  ["dragleave", "drop"].forEach((evt) =>
+    drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.remove("drag"); })
+  );
+  drop.addEventListener("drop", (e) => setFile(e.dataTransfer.files[0]));
+
+  // --- engines ------------------------------------------------------------
+  function populateEngines(health) {
+    state.engines = health.engines || {};
+    state.diarization = health.diarization !== false;
+    engineSelect.replaceChildren(
+      ...Object.entries(state.engines).map(([key, info]) => {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = info.label;
+        return option;
+      })
+    );
+    if (state.engines[health.default_engine]) engineSelect.value = health.default_engine;
+    $("diarize-label").hidden = !state.diarization;
+    applyEngineState();
+  }
+
+  function applyEngineState() {
+    const info = state.engines[engineSelect.value] || {};
+    const supportsLanguage = info.supports_language !== false;
+    languageSelect.disabled = !supportsLanguage;
+    $("translate").disabled = !supportsLanguage;
+    $("vad").disabled = !supportsLanguage;
+    if (!supportsLanguage) {
+      languageSelect.value = "";
+      $("translate").checked = false;
+    }
+    languageSelect.title = supportsLanguage ? "" : "This engine detects the language itself";
+    $("translate").parentElement.title = supportsLanguage ? "" : "Not supported by this engine";
+    $("vad").parentElement.title = supportsLanguage ? "" : "This engine always uses voice activity detection";
+    $("model-tag").textContent = info.model || "";
+  }
+
+  engineSelect.addEventListener("change", applyEngineState);
+
+  // --- status -------------------------------------------------------------
+  function setStatus(message, isError = false) {
+    if (!message) { statusEl.hidden = true; return; }
+    statusEl.hidden = false;
+    statusEl.classList.toggle("error", isError);
+    spinner.hidden = isError;
+    statusText.textContent = message;
+  }
+
+  function startTimer() {
+    state.startedAt = performance.now();
+    statusTime.textContent = "0.0 s";
+    state.tickId = setInterval(() => {
+      statusTime.textContent = ((performance.now() - state.startedAt) / 1000).toFixed(1) + " s";
+    }, 100);
+  }
+  function stopTimer() {
+    clearInterval(state.tickId);
+    state.tickId = null;
+  }
+
+  async function pollHealth() {
+    try {
+      const res = await fetch("/healthz");
+      if (!res.ok) return;
+      const health = await res.json();
+      state.engines = health.engines || state.engines;
+      const info = state.engines[engineSelect.value];
+      if (info && info.loading) {
+        statusText.textContent = "Loading " + info.label + " (first run downloads it)…";
+      } else if (health.busy) {
+        statusText.textContent = diarizeBox.checked && !diarizeBox.disabled
+          ? "Transcribing and separating speakers…"
+          : "Transcribing…";
+      }
+    } catch { /* server not reachable yet, ignore */ }
+  }
+
+  // --- transcribe ---------------------------------------------------------
+  async function transcribe() {
+    if (!state.file) return;
+    runBtn.disabled = true;
+    setStatus("Uploading…");
+    startTimer();
+    state.pollId = setInterval(pollHealth, 1500);
+
+    const params = new URLSearchParams();
+    params.set("engine", engineSelect.value);
+    if (!languageSelect.disabled && languageSelect.value) params.set("language", languageSelect.value);
+    if (!$("translate").disabled && $("translate").checked) params.set("task", "translate");
+    if (!$("vad").disabled) params.set("vad", $("vad").checked ? "true" : "false");
+    if (diarizeBox.checked && !diarizeBox.disabled) params.set("diarize", "true");
+
+    const body = new FormData();
+    body.append("file", state.file, state.file.name);
+
+    try {
+      const res = await fetch("/transcribe?" + params.toString(), { method: "POST", body });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const detail = data && data.detail;
+        throw new Error(typeof detail === "string" ? detail : "Request failed (" + res.status + ")");
+      }
+      render(data);
+      setStatus(null);
+    } catch (err) {
+      setStatus(err.message || "Something went wrong.", true);
+    } finally {
+      clearInterval(state.pollId);
+      state.pollId = null;
+      stopTimer();
+      runBtn.disabled = !state.file;
+    }
+  }
+  runBtn.addEventListener("click", transcribe);
+
+  // --- render -------------------------------------------------------------
+  function chip(label, value, title) {
+    const el = document.createElement("span");
+    el.className = "chip";
+    el.textContent = label + " ";
+    const strong = document.createElement("b");
+    strong.textContent = value;
+    el.appendChild(strong);
+    if (title) el.title = title;
+    return el;
+  }
+
+  function render(data) {
+    state.data = data;
+    resultEl.hidden = false;
+    resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    chips.replaceChildren();
+    const engineLabel = (state.engines[data.engine] || {}).label || data.engine;
+    chips.append(chip("Engine", engineLabel));
+    if (data.language) {
+      const language = new Intl.DisplayNames(["en"], { type: "language" });
+      let langName = data.language;
+      try { langName = language.of(data.language) || data.language; } catch { /* keep code */ }
+      const confidence = ((data.language_probability || 0) * 100).toFixed(1).replace(/\.0$/, "");
+      chips.append(chip("Language", langName + " · " + confidence + "%", "Detected language confidence"));
+    }
+    chips.append(chip("Duration", clock(data.duration)));
+    chips.append(chip("Took", data.elapsed.toFixed(1) + " s"));
+    if (data.duration > 0) {
+      const speed = (data.duration / Math.max(data.elapsed, 0.01)).toFixed(1);
+      chips.append(chip("Speed", speed + "× realtime"));
+    }
+    if (data.task === "translate") chips.append(chip("Mode", "translated to English"));
+    if (data.diarized) chips.append(chip("Speakers", data.speakers ?? "—"));
+
+    if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
+    state.audioUrl = URL.createObjectURL(state.file);
+    player.src = state.audioUrl;
+    player.load();
+
+    segmentsEl.replaceChildren();
+    state.rows = [];
+    if (!data.segments.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "No speech detected in this file.";
+      segmentsEl.append(empty);
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (const segment of data.segments) {
+      const row = document.createElement("div");
+      row.className = "segment";
+      row.dataset.start = segment.start;
+      row.dataset.end = segment.end;
+
+      const stamp = document.createElement("button");
+      stamp.type = "button";
+      stamp.className = "ts";
+      stamp.textContent = clock(segment.start);
+      stamp.title = "Play from here";
+      stamp.addEventListener("click", () => {
+        player.currentTime = Math.max(0, segment.start - 0.1);
+        player.play().catch(() => {});
+      });
+
+      const text = document.createElement("p");
+      text.textContent = segment.text;
+
+      const cell = document.createElement("div");
+      if (segment.speaker) {
+        const badge = document.createElement("span");
+        badge.className = "speaker";
+        badge.textContent = segment.speaker;
+        const index = Number((segment.speaker.match(/\d+$/) || [1])[0]) - 1;
+        badge.style.setProperty("--speaker-hue", String((index * 67 + 210) % 360));
+        cell.append(badge, text);
+      } else {
+        cell.append(text);
+      }
+
+      row.append(stamp, cell);
+      fragment.append(row);
+      state.rows.push(row);
+    }
+    segmentsEl.append(fragment);
+    segmentsEl.scrollTop = 0;
+  }
+
+  // highlight the segment being played
+  player.addEventListener("timeupdate", () => {
+    const time = player.currentTime;
+    let active = null;
+    for (const row of state.rows) {
+      if (time >= Number(row.dataset.start) && time < Number(row.dataset.end)) { active = row; break; }
+    }
+    for (const row of state.rows) row.classList.toggle("active", row === active);
+  });
+
+  // --- actions ------------------------------------------------------------
+  $("copy").addEventListener("click", async (event) => {
+    if (!state.data) return;
+    const button = event.currentTarget;
+    try {
+      await navigator.clipboard.writeText(state.data.text);
+      button.textContent = "Copied";
+      setTimeout(() => (button.textContent = "Copy text"), 1200);
+    } catch {
+      button.textContent = "Copy failed";
+      setTimeout(() => (button.textContent = "Copy text"), 1200);
+    }
+  });
+
+  function download(content, extension, type) {
+    const base = (state.file ? state.file.name : "transcript").replace(/\.[^.]+$/, "");
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = base + extension;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  $("download-txt").addEventListener("click", () => {
+    if (state.data) download(state.data.text + "\n", ".txt", "text/plain;charset=utf-8");
+  });
+  $("download-srt").addEventListener("click", () => {
+    if (state.data) download(state.data.srt + "\n", ".srt", "application/x-subrip;charset=utf-8");
+  });
+
+  // initial refresh: engine list, model tag, warm-up state
+  fetch("/healthz").then((r) => r.json()).then((h) => {
+    populateEngines(h);
+    if (h.busy) setStatus("Working…");
+  }).catch(() => {});
+})();
+</script>
+</body>
+</html>
